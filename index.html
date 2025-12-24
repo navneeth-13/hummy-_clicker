@@ -1,0 +1,222 @@
+‎<!DOCTYPE html>
+‎<html>
+‎<head>
+‎  <title>Hummy Clicker</title>
+‎  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+‎  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+‎
+‎  <style>
+‎    body {
+‎      font-family: Arial, sans-serif;
+‎      background: #f4f6ff;
+‎      text-align: center;
+‎      padding: 10px;
+‎    }
+‎    h1 { margin: 5px; }
+‎    .box {
+‎      background: white;
+‎      padding: 10px;
+‎      margin: 10px auto;
+‎      border-radius: 10px;
+‎      max-width: 320px;
+‎      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+‎    }
+‎    img {
+‎      width: 180px;
+‎      cursor: pointer;
+‎    }
+‎    button {
+‎      width: 95%;
+‎      padding: 10px;
+‎      margin: 5px 0;
+‎      border: none;
+‎      border-radius: 8px;
+‎      background: #4CAF50;
+‎      color: white;
+‎      font-size: 15px;
+‎    }
+‎    button:disabled { background: gray; }
+‎    small { color: #666; }
+‎  </style>
+‎</head>
+‎
+‎<body>
+‎
+‎<h1>🐹 Hummy Clicker</h1>
+‎<div id="coins">Coins: 0</div>
+‎<div id="energy">Energy: 100/100</div>
+‎
+‎<img src="https://i.imgur.com/4AiXzf8.png" onclick="tap()">
+‎
+‎<div class="box">
+‎  <button onclick="upgradeTap()">Upgrade Tap (+1)</button>
+‎  <small>Cost: <span id="tapCost">10</span></small>
+‎</div>
+‎
+‎<div class="box">
+‎  <button onclick="activateBoost()">⚡ 2× Boost (60s)</button>
+‎  <small>Cost: 50</small>
+‎</div>
+‎
+‎<div class="box">
+‎  <button onclick="claimDaily()">🎁 Daily Reward</button>
+‎  <small id="dailyInfo"></small>
+‎</div>
+‎
+‎<div class="box">
+‎  <h3>🎯 Mission</h3>
+‎  <small id="mission">Tap 100 times</small><br>
+‎  <button onclick="claimMission()">Claim Reward</button>
+‎</div>
+‎
+‎<div class="box">
+‎  <button onclick="prestige()">🔥 Prestige Reset</button>
+‎  <small>Gain permanent bonus</small>
+‎</div>
+‎
+‎<script>
+‎/* TELEGRAM */
+‎let tg = window.Telegram.WebApp;
+‎tg.ready();
+‎let uid = tg.initDataUnsafe?.user?.id || "guest";
+‎
+‎/* STORAGE */
+‎function get(k,d){ return JSON.parse(localStorage.getItem(uid+k)) ?? d; }
+‎function set(k,v){ localStorage.setItem(uid+k, JSON.stringify(v)); }
+‎
+‎/* GAME DATA */
+‎let coins = get("coins",0);
+‎let tapPower = get("tap",1);
+‎let tapCost = get("tapCost",10);
+‎let energy = get("energy",100);
+‎let maxEnergy = get("maxEnergy",100);
+‎let boostEnd = get("boost",0);
+‎let prestigeBonus = get("prestige",0);
+‎let lastLogin = get("lastLogin",Date.now());
+‎
+‎let missionTaps = get("missionTaps",0);
+‎let missionDone = get("missionDone",false);
+‎
+‎const idlePerSec = 1;
+‎
+‎/* OFFLINE INCOME */
+‎let now = Date.now();
+‎let offlineSec = Math.floor((now - lastLogin)/1000);
+‎if(offlineSec>0){
+‎  coins += offlineSec * idlePerSec;
+‎}
+‎lastLogin = now;
+‎
+‎/* TAP */
+‎function tap(){
+‎  if(energy<=0) return alert("No energy!");
+‎  energy--;
+‎
+‎  let mult = Date.now()<boostEnd ? 2 : 1;
+‎  coins += Math.floor((tapPower + prestigeBonus) * mult);
+‎
+‎  missionTaps++;
+‎  save();
+‎  update();
+‎}
+‎
+‎/* UPGRADE */
+‎function upgradeTap(){
+‎  if(coins>=tapCost){
+‎    coins-=tapCost;
+‎    tapPower++;
+‎    tapCost+=10;
+‎    save();
+‎    update();
+‎  }
+‎}
+‎
+‎/* BOOST */
+‎function activateBoost(){
+‎  if(coins>=50){
+‎    coins-=50;
+‎    boostEnd = Date.now()+60000;
+‎    save();
+‎    alert("Boost activated!");
+‎  }
+‎}
+‎
+‎/* ENERGY REGEN */
+‎setInterval(()=>{
+‎  if(energy<maxEnergy){
+‎    energy++;
+‎    save();
+‎    update();
+‎  }
+‎},5000);
+‎
+‎/* DAILY REWARD */
+‎function claimDaily(){
+‎  let last = get("daily",0);
+‎  let today = new Date().toDateString();
+‎  if(last===today){
+‎    document.getElementById("dailyInfo").innerText="Already claimed";
+‎    return;
+‎  }
+‎  coins+=100;
+‎  set("daily",today);
+‎  save();
+‎  update();
+‎}
+‎
+‎/* MISSION */
+‎function claimMission(){
+‎  if(missionTaps>=100 && !missionDone){
+‎    coins+=200;
+‎    missionDone=true;
+‎    save();
+‎    alert("Mission completed!");
+‎  }
+‎}
+‎
+‎/* PRESTIGE */
+‎function prestige(){
+‎  if(coins>=1000){
+‎    prestigeBonus++;
+‎    coins=0;
+‎    tapPower=1;
+‎    tapCost=10;
+‎    alert("Prestige gained! Permanent +1 bonus");
+‎    save();
+‎    update();
+‎  }
+‎}
+‎
+‎/* SAVE */
+‎function save(){
+‎  set("coins",coins);
+‎  set("tap",tapPower);
+‎  set("tapCost",tapCost);
+‎  set("energy",energy);
+‎  set("boost",boostEnd);
+‎  set("prestige",prestigeBonus);
+‎  set("missionTaps",missionTaps);
+‎  set("missionDone",missionDone);
+‎  set("lastLogin",Date.now());
+‎}
+‎
+‎/* UPDATE UI */
+‎function update(){
+‎  document.getElementById("coins").innerText="Coins: "+coins;
+‎  document.getElementById("energy").innerText="Energy: "+energy+"/"+maxEnergy;
+‎  document.getElementById("tapCost").innerText=tapCost;
+‎}
+‎
+‎/* IDLE WHILE OPEN */
+‎setInterval(()=>{
+‎  coins+=idlePerSec;
+‎  save();
+‎  update();
+‎},1000);
+‎
+‎update();
+‎</script>
+‎
+‎</body>
+‎</html>
+‎
